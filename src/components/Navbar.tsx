@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Users, Cloud, Check } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { UstadzProfile } from '../types/setoran';
 
 interface NavbarProps {
@@ -9,7 +9,6 @@ interface NavbarProps {
   onOpenUstadzModal: () => void;
   currentUstadz: UstadzProfile;
   totalUstadz: number;
-  isSyncing?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -18,8 +17,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenInputModal,
   onOpenUstadzModal,
   currentUstadz,
-  totalUstadz,
-  isSyncing = false
+  totalUstadz
 }) => {
   return (
     <header className="sticky top-0 z-30 bg-slate-900 text-white border-b border-emerald-950/60 shadow-md">
@@ -105,17 +103,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           </nav>
 
-          {/* Right Actions: Database Status Dot + Ustadz Switcher + Primary Button */}
+          {/* Right Actions: Active Ustadz Switcher + Primary Button (No Extra Status Indicators) */}
           <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-            {/* Subtle Database Auto-Sync Status Indicator (No Button, Pure Status) */}
-            <div 
-              className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-950/60 border border-emerald-800/40 text-[11px] text-emerald-300 font-medium"
-              title="Database Google Sheets terhubung otomatis"
-            >
-              <span className={`w-2 h-2 rounded-full ${isSyncing ? 'bg-amber-400 animate-ping' : 'bg-emerald-400'}`} />
-              <span>{isSyncing ? 'Menyinkronkan...' : 'Cloud Terhubung'}</span>
-            </div>
-
             {/* Active Ustadz Switcher */}
             <button
               onClick={onOpenUstadzModal}
@@ -125,7 +114,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <div className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
                 {currentUstadz.name.replace('Ustadz ', '').replace('Ustadzah ', '').charAt(0)}
               </div>
-              <span className="max-w-[85px] sm:max-w-[130px] truncate text-slate-200 font-semibold text-[11px] sm:text-xs">
+              <span className="max-w-[95px] sm:max-w-[130px] truncate text-slate-200 font-semibold text-[11px] sm:text-xs">
                 {currentUstadz.name}
               </span>
               <span className="text-[10px] text-slate-400">▾</span>

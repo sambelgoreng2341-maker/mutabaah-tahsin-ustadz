@@ -6,7 +6,6 @@ import { RekapBulanan } from './components/RekapBulanan';
 import { Peta30Juz } from './components/Peta30Juz';
 import { FormSetoranModal } from './components/FormSetoranModal';
 import { KelolaUstadzModal } from './components/KelolaUstadzModal';
-import { GoogleSheetsModal } from './components/GoogleSheetsModal';
 import { ApkInstallBanner } from './components/ApkInstallBanner';
 import { INITIAL_USTADZ, INITIAL_BACAAN } from './data/initialData';
 import { BacaanItem, UstadzProfile } from './types/setoran';
@@ -14,8 +13,9 @@ import { Users, Plus, BookOpen, CheckCircle2, Award, Database } from 'lucide-rea
 import { JUZ_LIST } from './data/quranData';
 import { 
   getSavedGasUrl, 
-  saveSingleBacaanToGas, 
-  deleteSingleBacaanFromGas,
+  queueSaveBacaan, 
+  queueDeleteBacaan,
+  flushSyncQueue,
   fetchFromGas 
 } from './services/googleSheetsService';
 
@@ -52,16 +52,17 @@ export default function App() {
   const [isFormOpen, setIsFormOpen] = useState<boolean>(false);
   const [editingItem, setEditingItem] = useState<BacaanItem | null>(null);
   const [isUstadzModalOpen, setIsUstadzModalOpen] = useState<boolean>(false);
-  const [isGasModalOpen, setIsGasModalOpen] = useState<boolean>(false);
   const [targetUstadzForInput, setTargetUstadzForInput] = useState<string | undefined>(undefined);
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
-  // Initial Fetch from Google Sheets endpoint if available
+  // Background Sync: Flush any pending device queue and silent fetch
   useEffect(() => {
     let isMounted = true;
     const gasUrl = getSavedGasUrl();
     if (gasUrl) {
-      setIsSyncing(true);
+      // 1. Flush antrean lokal yang belum sempat terkirim (misal karena lag/offline sebelumnya)
+      flushSyncQueue(gasUrl).catch(() => {});
+
+      // 2. Ambil pembaruan dari Sheets secara silent
       fetchFromGas(gasUrl)
         .then(res => {
           if (isMounted && res.success) {
@@ -73,15 +74,17 @@ export default function App() {
             }
           }
         })
-        .catch(err => {
-          console.warn('Initial GAS fetch failed:', err);
-        })
-        .finally(() => {
-          if (isMounted) setIsSyncing(false);
-        });
+        .catch(() => {});
     }
+
+    // Interval silent flush setiap 45 detik untuk memastikan data di queue selalu tersinkron
+    const intervalId = setInterval(() => {
+      flushSyncQueue(gasUrl).catch(() => {});
+    }, 45000);
+
     return () => {
       isMounted = false;
+      clearInterval(intervalId);
     };
   }, []);
 
@@ -129,25 +132,24 @@ export default function App() {
 
     setItems(prev => {
       const existsIndex = prev.findIndex(it => it.id === newItem.id);
+      let updated: BacaanItem[];
       if (existsIndex >= 0) {
-        const updated = [...prev];
+        updated = [...prev];
         updated[existsIndex] = newItem;
-        return updated;
+      } else {
+        updated = [newItem, ...prev];
       }
-      return [newItem, ...prev];
+      // Pastikan tersimpan langsung di memori lokal perangkat detik itu juga
+      try {
+        localStorage.setItem('ustadz_tilawah_items', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
     });
 
-    // Auto-sync ke Google Sheets secara otomatis di latar belakang
+    // Simpan ke antrean perangkat, lalu kirim ke Sheets di latar belakang
     const gasUrl = getSavedGasUrl();
     if (gasUrl) {
-      setIsSyncing(true);
-      saveSingleBacaanToGas(gasUrl, newItem)
-        .catch(err => {
-          console.warn('Latar belakang auto-sync ke Google Sheets:', err);
-        })
-        .finally(() => {
-          setIsSyncing(false);
-        });
+      queueSaveBacaan(newItem, gasUrl);
     }
 
     setEditingItem(null);
@@ -155,13 +157,18 @@ export default function App() {
 
   const handleDeleteBacaan = (id: string) => {
     if (window.confirm('Hapus catatan bacaan ini?')) {
-      setItems(prev => prev.filter(it => it.id !== id));
+      setItems(prev => {
+        const filtered = prev.filter(it => it.id !== id);
+        try {
+          localStorage.setItem('ustadz_tilawah_items', JSON.stringify(filtered));
+        } catch (e) {}
+        return filtered;
+      });
+
+      // Catat di antrean perangkat, lalu kirim ke Sheets di latar belakang
       const gasUrl = getSavedGasUrl();
       if (gasUrl) {
-        setIsSyncing(true);
-        deleteSingleBacaanFromGas(gasUrl, id)
-          .catch(err => console.warn('Latar belakang delete dari Google Sheets:', err))
-          .finally(() => setIsSyncing(false));
+        queueDeleteBacaan(id, gasUrl);
       }
     }
   };
@@ -227,7 +234,6 @@ export default function App() {
         onOpenUstadzModal={() => setIsUstadzModalOpen(true)}
         currentUstadz={currentUstadz}
         totalUstadz={ustadzList.length}
-        isSyncing={isSyncing}
       />
 
       {/* Main Content Area */}
@@ -378,10 +384,9 @@ export default function App() {
             />
             <span>Islamic Qur'anic Boarding School (IQBS) · Mutaba'ah Asatidz</span>
           </div>
-          <div className="flex items-center gap-2 text-slate-500 text-[11px]">
-            <span className={`w-2 h-2 rounded-full inline-block ${isSyncing ? 'bg-amber-400 animate-pulse' : 'bg-emerald-500'}`} />
-            <span>Database Google Sheets Terhubung Otomatis</span>
-          </div>
+          <p className="text-slate-400 text-[11px]">
+            Pencatatan & Rekapitulasi Capaian Tilawah Al-Qur'an Para Ustadz
+          </p>
         </div>
       </footer>
 
@@ -427,18 +432,6 @@ export default function App() {
           }
         }}
         onResetData={handleResetData}
-      />
-
-      {/* Google Sheets Database Modal */}
-      <GoogleSheetsModal
-        isOpen={isGasModalOpen}
-        onClose={() => setIsGasModalOpen(false)}
-        items={items}
-        ustadzList={ustadzList}
-        onDataPulledFromSheets={(newBacaan, newUstadz) => {
-          setItems(newBacaan);
-          setUstadzList(newUstadz);
-        }}
       />
     </div>
   );
