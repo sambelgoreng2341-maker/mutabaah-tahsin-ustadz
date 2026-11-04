@@ -1,0 +1,21 @@
+{
+  "name": "Mutaba'ah Quran - Monitor Setoran",
+  "short_name": "Mutaba'ah Quran",
+  "description": "Aplikasi monitoring setoran hafalan dan bacaan Al-Qur'an harian serta rekap grafik progres bulanan.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#065f46",
+  "theme_color": "#065f46",
+  "icons": [
+    {
+      "src": "/assets/aistudio/Logo_IQBS_Only_663a98d6.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png"
+    }
+  ]
+}
